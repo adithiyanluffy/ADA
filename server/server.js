@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const dotenv = require("dotenv");
 const User= require('./Schema'); 
-
+const Accident=require('./Schema');
 dotenv.config();
 const app = express();
 app.use(express.json());
@@ -45,6 +45,90 @@ const verifyToken = (req, res, next) => {
     res.status(400).json({ message: "Invalid Token" });
   }
 };
+//get all accidents
+
+app.get('/accidents', verifyToken,async (req, res) => {
+  try {
+    const accidents = await Accident.find(); // Fetch all accidents
+    res.status(200).json(accidents);
+  } catch (error) {
+    res.status(500).json({ message: 'Error retrieving accidents', error });
+  }
+});
+//getting all users
+app.get('/users',verifyToken, async (req, res) => {
+  try {
+    const users = await User.find({ role: "user" }); // Fetches only users (not admins)
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching users", error });
+  }
+});
+
+
+// get user -compelted accidents
+app.get('/user/:userId/completed-accidents',verifyToken, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const user = await User.findById(userId).populate({
+      path: "accidents.accident",
+      match: { "accidents.status": "completed" } // Filter only completed ones
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const completedAccidents = user.accidents.filter(a => a.status === "completed");
+
+    res.status(200).json(completedAccidents);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching completed accidents", error });
+  }
+});
+// delete accident when accepted by driver 
+app.delete('/accidents/:id', async (req, res) => {
+  try {
+    const accidentId = req.params.id;
+    const deletedAccident = await Accident.findByIdAndDelete(accidentId);
+
+    if (!deletedAccident) {
+      return res.status(404).json({ message: "Accident not found" });
+    }
+
+    res.status(200).json({ message: "Accident deleted successfully", deletedAccident });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting accident", error });
+  }
+});
+// adding new accidents
+app.post('/accidents', async (req, res) => {
+  try {
+    const { location, complete_address, lat, lng, maps_link, datetime, severity_label } = req.body;
+
+    // Validate required fields
+    if (!location || !complete_address || !lat || !lng || !datetime || !severity_label) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Create new accident document
+    const newAccident = new Accident({
+      location,
+      complete_address,
+      lat,
+      lng,
+      maps_link,
+      datetime,
+      severity_label
+    });
+
+    // Save to database
+    await newAccident.save();
+    res.status(201).json({ message: "Accident added successfully", accident: newAccident });
+
+  } catch (error) {
+    res.status(500).json({ message: "Error adding accident", error });
+  }
+});
 
 // Admin Login
 app.post("/admin/login", async (req, res) => {
